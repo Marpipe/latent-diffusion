@@ -29,6 +29,79 @@ def load_model_from_config(config, ckpt, verbose=False):
     model.eval()
     return model
 
+def process_txt2img(
+    prompt = "a painting of a virus monster playing guitar",
+    outdir = "outputs/txt2img-samples",
+    ddim_steps = 200,
+    plms = True,
+    ddim_eta = 0.0, 
+    n_iter = 1,
+    H = 256,
+    W = 256,
+    n_samples = 4,
+    scale = 5
+):
+    
+    config = OmegaConf.load("configs/latent-diffusion/txt2img-1p4B-eval.yaml")  # TODO: Optionally download from same location as ckpt and chnage this logic
+    model = load_model_from_config(config, "models/ldm/text2img-large/model.ckpt")  # TODO: check path
+
+    device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
+    model = model.to(device)
+
+    if opt.plms:
+        sampler = PLMSSampler(model)
+    else:
+        sampler = DDIMSampler(model)
+
+    os.makedirs(opt.outdir, exist_ok=True)
+    outpath = opt.outdir
+
+    prompt = opt.prompt
+
+
+    sample_path = os.path.join(outpath, "samples")
+    os.makedirs(sample_path, exist_ok=True)
+    base_count = len(os.listdir(sample_path))
+
+    all_samples=list()
+    with torch.no_grad():
+        with model.ema_scope():
+            uc = None
+            if opt.scale != 1.0:
+                uc = model.get_learned_conditioning(opt.n_samples * [""])
+            for n in trange(opt.n_iter, desc="Sampling"):
+                c = model.get_learned_conditioning(opt.n_samples * [prompt])
+                shape = [4, opt.H//8, opt.W//8]
+                samples_ddim, _ = sampler.sample(S=opt.ddim_steps,
+                                                 conditioning=c,
+                                                 batch_size=opt.n_samples,
+                                                 shape=shape,
+                                                 verbose=False,
+                                                 unconditional_guidance_scale=opt.scale,
+                                                 unconditional_conditioning=uc,
+                                                 eta=opt.ddim_eta)
+
+                x_samples_ddim = model.decode_first_stage(samples_ddim)
+                x_samples_ddim = torch.clamp((x_samples_ddim+1.0)/2.0, min=0.0, max=1.0)
+
+                for x_sample in x_samples_ddim:
+                    x_sample = 255. * rearrange(x_sample.cpu().numpy(), 'c h w -> h w c')
+                    Image.fromarray(x_sample.astype(np.uint8)).save(os.path.join(sample_path, f"{base_count:04}.png"))
+                    base_count += 1
+                all_samples.append(x_samples_ddim)
+
+
+    # additionally, save as grid
+    grid = torch.stack(all_samples, 0)
+    grid = rearrange(grid, 'n b c h w -> (n b) c h w')
+    grid = make_grid(grid, nrow=opt.n_samples)
+
+    # to image
+    grid = 255. * rearrange(grid, 'c h w -> h w c').cpu().numpy()
+    Image.fromarray(grid.astype(np.uint8)).save(os.path.join(outpath, f'{prompt.replace(" ", "-")}.png'))
+    
+    return outpath
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -104,62 +177,17 @@ if __name__ == "__main__":
     opt = parser.parse_args()
 
 
-    config = OmegaConf.load("configs/latent-diffusion/txt2img-1p4B-eval.yaml")  # TODO: Optionally download from same location as ckpt and chnage this logic
-    model = load_model_from_config(config, "models/ldm/text2img-large/model.ckpt")  # TODO: check path
-
-    device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
-    model = model.to(device)
-
-    if opt.plms:
-        sampler = PLMSSampler(model)
-    else:
-        sampler = DDIMSampler(model)
-
-    os.makedirs(opt.outdir, exist_ok=True)
-    outpath = opt.outdir
-
-    prompt = opt.prompt
-
-
-    sample_path = os.path.join(outpath, "samples")
-    os.makedirs(sample_path, exist_ok=True)
-    base_count = len(os.listdir(sample_path))
-
-    all_samples=list()
-    with torch.no_grad():
-        with model.ema_scope():
-            uc = None
-            if opt.scale != 1.0:
-                uc = model.get_learned_conditioning(opt.n_samples * [""])
-            for n in trange(opt.n_iter, desc="Sampling"):
-                c = model.get_learned_conditioning(opt.n_samples * [prompt])
-                shape = [4, opt.H//8, opt.W//8]
-                samples_ddim, _ = sampler.sample(S=opt.ddim_steps,
-                                                 conditioning=c,
-                                                 batch_size=opt.n_samples,
-                                                 shape=shape,
-                                                 verbose=False,
-                                                 unconditional_guidance_scale=opt.scale,
-                                                 unconditional_conditioning=uc,
-                                                 eta=opt.ddim_eta)
-
-                x_samples_ddim = model.decode_first_stage(samples_ddim)
-                x_samples_ddim = torch.clamp((x_samples_ddim+1.0)/2.0, min=0.0, max=1.0)
-
-                for x_sample in x_samples_ddim:
-                    x_sample = 255. * rearrange(x_sample.cpu().numpy(), 'c h w -> h w c')
-                    Image.fromarray(x_sample.astype(np.uint8)).save(os.path.join(sample_path, f"{base_count:04}.png"))
-                    base_count += 1
-                all_samples.append(x_samples_ddim)
-
-
-    # additionally, save as grid
-    grid = torch.stack(all_samples, 0)
-    grid = rearrange(grid, 'n b c h w -> (n b) c h w')
-    grid = make_grid(grid, nrow=opt.n_samples)
-
-    # to image
-    grid = 255. * rearrange(grid, 'c h w -> h w c').cpu().numpy()
-    Image.fromarray(grid.astype(np.uint8)).save(os.path.join(outpath, f'{prompt.replace(" ", "-")}.png'))
-
+    outpath = process_txt2img(
+        opt.prompt,
+        opt.outdir,
+        opt.ddim_steps,
+        opt.plms,
+        opt.ddim_eta, 
+        opt.n_iter,
+        opt.H,
+        opt.W,
+        opt.n_samples,
+        opt.scale
+    )
+    
     print(f"Your samples are ready and waiting four you here: \n{outpath} \nEnjoy.")
