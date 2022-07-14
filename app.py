@@ -26,9 +26,11 @@ from ldm.models.diffusion.plms import PLMSSampler
 from open_clip import tokenizer
 import open_clip
 
+CUDA_AVAILABLE = True if torch.cuda.is_available() else False
+
 def load_model_from_config(config, ckpt, verbose=False):
     print(f"Loading model from {ckpt}")
-    map_location = "cuda" if torch.cuda.is_available() == True else "cpu"
+    map_location = "cuda" if CUDA_AVAILABLE else "cpu"
     pl_sd = torch.load(ckpt, map_location=map_location)
     sd = pl_sd["state_dict"]
     model = instantiate_from_config(config.model)
@@ -40,7 +42,7 @@ def load_model_from_config(config, ckpt, verbose=False):
         print("unexpected keys:")
         print(u)
 
-    model = model.half().cuda()
+    model = model.half().cuda() if CUDA_AVAILABLE else model.half()
     model.eval()
     return model
 
@@ -94,7 +96,7 @@ def is_unsafe(safety_model, embeddings, threshold=0.5):
 
 config = OmegaConf.load("latent-diffusion/configs/latent-diffusion/txt2img-1p4B-eval.yaml")
 model = load_model_from_config(config,model_path_e)
-device = torch.device("cuda") if torch.cuda.is_available() == True else torch.device("cpu")
+device = torch.device("cuda") if CUDA_AVAILABLE else torch.device("cpu")
 model = model.to(device)
 
 #NSFW CLIP Filter
