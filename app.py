@@ -93,7 +93,7 @@ def is_unsafe(safety_model, embeddings, threshold=0.5):
 
 config = OmegaConf.load("latent-diffusion/configs/latent-diffusion/txt2img-1p4B-eval.yaml")
 model = load_model_from_config(config,model_path_e)
-device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
+device = torch.device("cuda") if torch.cuda.is_available() == True else torch.device("cpu")
 model = model.to(device)
 
 #NSFW CLIP Filter
