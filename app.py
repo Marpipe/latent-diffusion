@@ -28,7 +28,8 @@ import open_clip
 
 def load_model_from_config(config, ckpt, verbose=False):
     print(f"Loading model from {ckpt}")
-    pl_sd = torch.load(ckpt, map_location="cuda")
+    map_location = "cuda" if torch.cuda.is_available() == True else "cpu"
+    pl_sd = torch.load(ckpt, map_location=map_location)
     sd = pl_sd["state_dict"]
     model = instantiate_from_config(config.model)
     m, u = model.load_state_dict(sd, strict=False)
