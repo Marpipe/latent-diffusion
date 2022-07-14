@@ -48,15 +48,15 @@ def process_txt2img(
     device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
     model = model.to(device)
 
-    if opt.plms:
+    if plms:
         sampler = PLMSSampler(model)
     else:
         sampler = DDIMSampler(model)
 
-    os.makedirs(opt.outdir, exist_ok=True)
-    outpath = opt.outdir
+    os.makedirs(outdir, exist_ok=True)
+    outpath = outdir
 
-    prompt = opt.prompt
+    prompt = prompt
 
 
     sample_path = os.path.join(outpath, "samples")
@@ -67,19 +67,19 @@ def process_txt2img(
     with torch.no_grad():
         with model.ema_scope():
             uc = None
-            if opt.scale != 1.0:
-                uc = model.get_learned_conditioning(opt.n_samples * [""])
-            for n in trange(opt.n_iter, desc="Sampling"):
-                c = model.get_learned_conditioning(opt.n_samples * [prompt])
-                shape = [4, opt.H//8, opt.W//8]
-                samples_ddim, _ = sampler.sample(S=opt.ddim_steps,
+            if scale != 1.0:
+                uc = model.get_learned_conditioning(n_samples * [""])
+            for n in trange(n_iter, desc="Sampling"):
+                c = model.get_learned_conditioning(n_samples * [prompt])
+                shape = [4, H//8, W//8]
+                samples_ddim, _ = sampler.sample(S=ddim_steps,
                                                  conditioning=c,
-                                                 batch_size=opt.n_samples,
+                                                 batch_size=n_samples,
                                                  shape=shape,
                                                  verbose=False,
-                                                 unconditional_guidance_scale=opt.scale,
+                                                 unconditional_guidance_scale=scale,
                                                  unconditional_conditioning=uc,
-                                                 eta=opt.ddim_eta)
+                                                 eta=ddim_eta)
 
                 x_samples_ddim = model.decode_first_stage(samples_ddim)
                 x_samples_ddim = torch.clamp((x_samples_ddim+1.0)/2.0, min=0.0, max=1.0)
@@ -94,7 +94,7 @@ def process_txt2img(
     # additionally, save as grid
     grid = torch.stack(all_samples, 0)
     grid = rearrange(grid, 'n b c h w -> (n b) c h w')
-    grid = make_grid(grid, nrow=opt.n_samples)
+    grid = make_grid(grid, nrow=n_samples)
 
     # to image
     grid = 255. * rearrange(grid, 'c h w -> h w c').cpu().numpy()
