@@ -208,7 +208,7 @@ AUTH_USER = os.getenv('AUTH_USER', None)
 AUTH_PASSWORD = os.getenv('AUTH_PASSWORD', None)
 
 iface.launch(
-    enable_queue=True, 
+    enable_queue=False, 
     server_name="0.0.0.0",
     auth=(AUTH_USER, AUTH_PASSWORD),
 )
